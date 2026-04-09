@@ -332,7 +332,7 @@ def build_dataset(
     sources: tuple[str, ...],
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     rng = np.random.default_rng(seed)
-    fake = Faker("pt_BR")
+    # fake = Faker("pt_BR")
     Faker.seed(seed)
 
     all_transactions: list[dict] = []
@@ -391,7 +391,6 @@ def tokenize_transaction(txn: dict) -> list[str]:
     date = datetime.strptime(txn["date"], "%Y-%m-%d")
 
     # Sign token
-    # sign_tok = "<PAID>" if amount >= 0 else "<RCVD>"
     sign_tok = "<PAID>" if amount < 0 else "<RCVD>"
 
     # Amount bucket token
@@ -399,7 +398,6 @@ def tokenize_transaction(txn: dict) -> list[str]:
         (i for i, edge in enumerate(AMOUNT_BINS[1:], start=1) if abs(amount) < edge),
         len(AMOUNT_BINS) - 1,
     )
-    # amt_tok = f"<AMOUNT:{bucket:02d}-{AMOUNT_BINS[bucket]:.0f}>"
 
     low = AMOUNT_BINS[bucket - 1] if bucket > 0 else 0
     high = AMOUNT_BINS[bucket]
@@ -416,24 +414,6 @@ def tokenize_transaction(txn: dict) -> list[str]:
     # Order follows Eq. (1): φ_sign, φ_amt, φ_month, φ_day, φ_weekday ⊕ BPE(desc)
     return [sign_tok, amt_tok, month_tok, day_tok, weekday_tok] + desc_tokens
 
-
-# REMOVE
-def tokenize_member_sequence_OLD(
-    member_transactions: list[dict],
-    max_tokens: int = 2048,
-    sep_token: str = "<SEP>",
-) -> list[str]:
-    # Reverse so we keep the most recent first, then reverse back
-    all_tokens: list[str] = []
-    for txn in reversed(member_transactions):
-        tok = tokenize_transaction(txn) + [sep_token]
-        if len(all_tokens) + len(tok) > max_tokens:
-            break
-        all_tokens.extend(tok)
-
-    all_tokens.reverse()
-    return all_tokens
-
 def tokenize_member_sequence(
     member_transactions: list[dict],
     max_tokens: int = 2048,
@@ -445,20 +425,18 @@ def tokenize_member_sequence(
         for txn in member_transactions
     ]
 
-    # pega do final (transações mais recentes)
-    selected = []
-    total = 0
-
+    # Get most recent transactions
+    selected, total = [], 0
+    
     for tok in reversed(tokens_per_txn):
         if total + len(tok) > max_tokens:
             break
         selected.append(tok)
         total += len(tok)
 
-    # volta ordem cronológica correta (sem inverter tokens!)
+    # Restore chronological order (without reversing tokens)
     selected.reverse()
 
-    # flatten
     return [t for txn in selected for t in txn]
 
 
@@ -533,7 +511,7 @@ def save_dataset(
 # CLI
 # ──────────────────────────────────────────────────────────────────────────────
 
-def parse_args():
+def parse_args() -> None:
     parser = argparse.ArgumentParser(
         description="Generate synthetic transaction dataset"
     )
@@ -556,7 +534,7 @@ def parse_args():
     return parser.parse_args()
 
 
-def main():
+def main() -> None:
     args = parse_args()
 
     sources = tuple(s.strip().upper() for s in args.sources.split(","))

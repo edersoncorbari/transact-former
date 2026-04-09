@@ -3,7 +3,7 @@ transactFormer — trainer.py
 
 Author: Ederson Corbari <ecorbari@proton.me>
 Created: 2026-04
-Based on: "Your Spending Needs Attention: Modeling Financial Habits with Transformers" (transactformer)
+Based on: "Your Spending Needs Attention: Modeling Financial Habits with Transformers"
 
 Training loops for all three phases described in the paper:
 
@@ -12,6 +12,7 @@ Training loops for all three phases described in the paper:
     Phase 3 — Joint Fusion   : End-to-end transactformer training (Section 3.3)
 
 Each trainer follows the same interface:
+
     trainer.fit(train_loader, val_loader)
     trainer.evaluate(loader) -> metrics dict
 """

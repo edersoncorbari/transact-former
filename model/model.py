@@ -5,7 +5,7 @@ Full model architecture implementing Sections 3.1, 3.2 and 3.3 of the paper.
 
 Author: Ederson Corbari <ecorbari@proton.me>
 Created: 2026-04
-Based on: "Your Spending Needs Attention: Modeling Financial Habits with Transformers" (transactformer)
+Based on: "Your Spending Needs Attention: Modeling Financial Habits with Transformers"
 
 Components
 ──────────

@@ -3,7 +3,7 @@ Synthetic Financial Transaction Dataset Generator
 
 Author: Ederson Corbari <ecorbari@proton.me>
 Created: 2026-04
-Based on: "Your Spending Needs Attention: Modeling Financial Habits with Transformers" (nuFormer)
+Based on: "Your Spending Needs Attention: Modeling Financial Habits with Transformers"
 
 Generates a realistic synthetic dataset that mirrors the structure described in the paper:
   - Members with time-ordered transaction sequences
@@ -14,6 +14,7 @@ Generates a realistic synthetic dataset that mirrors the structure described in 
 
 Usage:
     python generate_dataset.py --members 10000 --output ./data --seed 42
+    python3 generate_dataset.py --members 500000 --score-dates 3 --output ./data --seed 42
 """
 
 import argparse

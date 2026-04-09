@@ -5,7 +5,7 @@ Typed dataclasses for every hyper-parameter in the pipeline.
 
 Author: Ederson Corbari <ecorbari@proton.me>
 Created: 2026-04
-Based on: "Your Spending Needs Attention: Modeling Financial Habits with Transformers" (transactformer)
+Based on: "Your Spending Needs Attention: Modeling Financial Habits with Transformers"
 
 Usage
 ─────

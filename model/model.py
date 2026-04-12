@@ -234,18 +234,26 @@ class TransactionTransformer(nn.Module):
         used for downstream tasks.
         """
         hidden = self.encode(input_ids, attention_mask)  # (B, T, D)
-
+        
         if attention_mask is not None:
-            # Index of last real token per sequence
-            lengths  = attention_mask.sum(dim=1) - 1           # (B,)
-            lengths  = lengths.clamp(min=0)
-            idx      = lengths.unsqueeze(-1).unsqueeze(-1)     # (B, 1, 1)
-            idx      = idx.expand(-1, 1, hidden.size(-1))      # (B, 1, D)
-            user_emb = hidden.gather(1, idx).squeeze(1)        # (B, D)
+            # Creates a floating mask to ignore paddings in pooling
+            # mask shape: (B, T, 1)
+            mask = attention_mask.unsqueeze(-1).float()
+            
+            # Mean Pooling (of real tokens only)
+            sum_emb = (hidden * mask).sum(dim=1)
+            mean_pool = sum_emb / mask.sum(dim=1).clamp(min=1e-9)
+            
+            # Max Pooling (real tokens only)
+            # Replaces paddings with a very low value so as not to affect the Max
+            masked_hidden = hidden.masked_fill(~attention_mask.unsqueeze(-1), float("-inf"))
+            max_pool = masked_hidden.max(dim=1).values
         else:
-            user_emb = hidden[:, -1, :]                         # (B, D)
+            mean_pool = hidden.mean(dim=1)
+            max_pool  = hidden.max(dim=1).values
 
-        return user_emb
+        # Concatenate: 64 + 64 = 128. Now the Head will accept it! EDMC.
+        return torch.cat([mean_pool, max_pool], dim=-1)
 
 
 # ──────────────────────────────────────────────────────────────────────────────

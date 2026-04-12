@@ -70,3 +70,28 @@ class Vocabulary:
         for tok in SPECIAL_TOKENS:
             self._add(tok)
 
+def tokenise_member(
+    transactions: list[dict],
+    max_seq_len: int = 2048,
+) -> list[str]:
+    """
+    Eq. (2): x_i = SEP-delimited transaction strings, truncated to max_seq_len
+    by keeping the most RECENT transactions (paper uses causal attention →
+    recency matters).
+    """
+    # Build per-transaction token chunks newest-first, then reverse
+    chunks: list[list[str]] = []
+    total = 0
+    for txn in reversed(transactions):
+        chunk = tokenise_transaction(txn) + [SEP_TOKEN]
+        if total + len(chunk) > max_seq_len - 2:  # reserve BOS + EOS
+            break
+        chunks.append(chunk)
+        total += len(chunk)
+
+    tokens = [BOS_TOKEN]
+    for chunk in reversed(chunks):
+        tokens.extend(chunk)
+    tokens.append(EOS_TOKEN)
+    return tokens
+

@@ -1,5 +1,10 @@
 """
 tsFormer — config.py
+
+Author: Ederson Corbari <ecorbari@proton.me>
+Created: 2026-04
+Based on: "Your Spending Needs Attention: Modeling Financial Habits with Transformers"
+
 Typed dataclasses for every hyper-parameter in the pipeline.
 
 Usage
@@ -16,6 +21,7 @@ Usage
 from __future__ import annotations
 
 import json
+
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Optional

@@ -166,7 +166,7 @@ def _build_embedding_classifier(
     )
 
 
-def _build_nuformer(cfg: tsFormerConfig, vocab_size: int, n_tabular: int) -> tsFormer:
+def _build_tsformer(cfg: tsFormerConfig, vocab_size: int, n_tabular: int) -> tsFormer:
     tc, lc, pc, dc, hc = (
         cfg.model.transformer,
         cfg.model.lora,
@@ -307,15 +307,16 @@ class tsFormerPredictor(_BasePredictor):
         vocab = Vocabulary.load(vocab_path)
         meta = load_tabular_meta(tabular_meta_path)
 
-        model = _build_nuformer(cfg, len(vocab), len(meta["tab_cols"]))
+        model = _build_tsformer(cfg, len(vocab), len(meta["tab_cols"]))
         state_dict = _load_state(checkpoint_path)
         own_keys = set(model.state_dict().keys())
         filtered = {k: v for k, v in state_dict.items() if k in own_keys}
+        
         missing = own_keys - set(filtered.keys())
         if missing:
             raise RuntimeError(
                 f"Checkpoint is missing {len(missing)} required keys. "
-                f"Is this a nuformer checkpoint? Missing: {list(missing)[:3]}"
+                f"Is this a tsFormer checkpoint? Missing: {list(missing)[:3]}"
             )
         model.load_state_dict(filtered, strict=True)
 
@@ -364,16 +365,23 @@ class tsFormerPredictor(_BasePredictor):
     def score_batch(self, inputs: list[MemberInput]) -> list[PredictionResult]:
         t0 = time.perf_counter()
         ids, mask = self._encode_sequences(inputs)
+
         tab = self._encode_tabular(inputs)
         out = self.model(ids, tab, mask)
+
         logits = out["logits"].cpu().tolist()
         probs = torch.sigmoid(out["logits"]).cpu().tolist()
         elapsed = (time.perf_counter() - t0) * 1000 / max(len(inputs), 1)
-        return [
-            PredictionResult(inp.member_id, round(l, 6), round(p, 6), round(elapsed, 2))
-            for inp, l, p in zip(inputs, logits, probs)
-        ]
 
+        return [
+            PredictionResult(
+                inp.member_id,
+                round(logit, 6),
+                round(prob, 6),
+                round(elapsed, 2),
+            )
+            for inp, logit, prob in zip(inputs, logits, probs)
+        ]
 
 # ──────────────────────────────────────────────────────────────────────────────
 # 2. LateFusionPredictor (embedding classifier — no tabular required)
@@ -438,7 +446,6 @@ class LateFusionPredictor(_BasePredictor):
 
         # 3. Professional Key Filtering (Only what's needed for Late Fusion)
         own_keys = model.state_dict().keys()
-        # We filter to ignore plr.*, dcn.* and emb_norm.* which are in the file
         filtered_state = {k: v for k, v in state_dict.items() if k in own_keys}
 
         # 4. Secure Loading
@@ -449,8 +456,10 @@ class LateFusionPredictor(_BasePredictor):
     def score(self, inp: MemberInput) -> PredictionResult:
         t0 = time.perf_counter()
         ids, mask = self._encode_sequences([inp])
+
         logit = self.model(ids, mask).item()
         prob = torch.sigmoid(torch.tensor(logit)).item()
+
         return PredictionResult(
             member_id=inp.member_id,
             logit=round(logit, 6),
@@ -462,12 +471,19 @@ class LateFusionPredictor(_BasePredictor):
     def score_batch(self, inputs: list[MemberInput]) -> list[PredictionResult]:
         t0 = time.perf_counter()
         ids, mask = self._encode_sequences(inputs)
+
         logits = self.model(ids, mask).cpu().tolist()
         probs = torch.sigmoid(torch.tensor(logits)).tolist()
         elapsed = (time.perf_counter() - t0) * 1000 / max(len(inputs), 1)
+
         return [
-            PredictionResult(inp.member_id, round(l, 6), round(p, 6), round(elapsed, 2))
-            for inp, l, p in zip(inputs, logits, probs)
+            PredictionResult(
+                inp.member_id,
+                round(logit, 6),
+                round(prob, 6),
+                round(elapsed, 2),
+            )
+            for inp, logit, prob in zip(inputs, logits, probs)
         ]
 
 

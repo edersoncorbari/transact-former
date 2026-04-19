@@ -28,4 +28,4 @@ clean:
 	find . -type d -name "results" -exec rm -rf {} +
 
 all: install style
-	@echo "🎯 All tasks completed successfully."
+	@echo "All tasks completed successfully."

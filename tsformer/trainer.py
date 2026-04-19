@@ -26,7 +26,6 @@ import torch.amp as _amp
 from pathlib import Path
 from typing import Optional
 
-from torch.cuda.amp import GradScaler
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, SequentialLR
 from torch.utils.data import DataLoader
@@ -145,6 +144,8 @@ class PreTrainer:
     ) -> None:
         self.model = model.to(device)
         self.device = device
+        self.device_type = device.type
+
         self.max_grad_norm = max_grad_norm
         self.checkpoint_dir = Path(checkpoint_dir) if checkpoint_dir else None
         self.log_every = log_every
@@ -156,8 +157,18 @@ class PreTrainer:
             if amp_dtype == "fp16"
             else None
         )
+
+        if self.device_type == "cpu" and self._amp_dtype == torch.float16:
+            self._amp_dtype = None
+
         self._use_amp = self._amp_dtype is not None
-        self._scaler = GradScaler(enabled=(self._amp_dtype == torch.float16))
+
+        use_fp16 = self._amp_dtype == torch.float16
+
+        self._scaler = torch.amp.GradScaler(
+            device=self.device_type,
+            enabled=(self.device_type == "cuda" and use_fp16),
+        )
 
         self._lr = lr
         self._weight_decay = weight_decay
@@ -196,7 +207,8 @@ class PreTrainer:
                 batch = _to_device(batch, self.device)
 
                 with _amp.autocast(
-                    device_type=self.device.type,
+                    # device_type=self.device.type,
+                    device_type=self.device_type,
                     dtype=self._amp_dtype,
                     enabled=self._use_amp,
                 ):
@@ -247,7 +259,8 @@ class PreTrainer:
         for batch in loader:
             batch = _to_device(batch, self.device)
             with _amp.autocast(
-                device_type=self.device.type,
+                # device_type=self.device.type,
+                device_type=self.device_type,
                 dtype=self._amp_dtype,
                 enabled=self._use_amp,
             ):
@@ -294,6 +307,8 @@ class FineTuneTrainer:
     ) -> None:
         self.model = model.to(device)
         self.device = device
+        self.device_type = device.type
+
         self.max_grad_norm = max_grad_norm
         self.checkpoint_dir = Path(checkpoint_dir) if checkpoint_dir else None
         self.log_every = log_every
@@ -305,10 +320,20 @@ class FineTuneTrainer:
             if amp_dtype == "fp16"
             else None
         )
+
+        if self.device_type == "cpu" and self._amp_dtype == torch.float16:
+            self._amp_dtype = None
+
         self._use_amp = self._amp_dtype is not None
-        self._scaler = GradScaler(enabled=(self._amp_dtype == torch.float16))
+        use_fp16 = self._amp_dtype == torch.float16
+
+        self._scaler = torch.amp.GradScaler(
+            device=self.device_type,
+            enabled=(self.device_type == "cuda" and use_fp16),
+        )
+
         self._pos_weight = (
-            torch.tensor([pos_weight], device=device) if pos_weight else None
+            torch.tensor([pos_weight], device=self.device) if pos_weight else None
         )
 
         self._lr = lr
@@ -343,7 +368,8 @@ class FineTuneTrainer:
                 batch = _to_device(batch, self.device)
 
                 with _amp.autocast(
-                    device_type=self.device.type,
+                    # device_type=self.device.type,
+                    device_type=self.device_type,
                     dtype=self._amp_dtype,
                     enabled=self._use_amp,
                 ):
@@ -399,7 +425,8 @@ class FineTuneTrainer:
         for batch in loader:
             batch = _to_device(batch, self.device)
             with _amp.autocast(
-                device_type=self.device.type,
+                # device_type=self.device_type,
+                device_type=self.device_type,
                 dtype=self._amp_dtype,
                 enabled=self._use_amp,
             ):

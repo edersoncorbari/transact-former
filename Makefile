@@ -23,6 +23,9 @@ clean:
 	find . -type d -name "__pycache__" -exec rm -rf {} +
 	find . -type d -name ".ruff_cache" -exec rm -rf {} +
 	find . -type d -name ".pytest_cache" -exec rm -rf {} +
+	find . -type d -name "data" -exec rm -rf {} +
+	find . -type d -name "checkpoints" -exec rm -rf {} +
+	find . -type d -name "results" -exec rm -rf {} +
 
 all: install style
 	@echo "🎯 All tasks completed successfully."

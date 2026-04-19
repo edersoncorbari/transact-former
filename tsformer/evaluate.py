@@ -75,8 +75,8 @@ def compute_roc_curve(
     n_neg = len(labels) - n_pos
 
     for thr in thresholds:
-        tp = sum(1 for s, l in zip(scores, labels) if s >= thr and l == 1)
-        fp = sum(1 for s, l in zip(scores, labels) if s >= thr and l == 0)
+        tp = sum(1 for s, label in zip(scores, labels) if s >= thr and label == 1)
+        fp = sum(1 for s, label in zip(scores, labels) if s >= thr and label == 0)
         tpr_list.append(tp / max(n_pos, 1))
         fpr_list.append(fp / max(n_neg, 1))
 
@@ -92,8 +92,8 @@ def compute_pr_curve(
     n_pos = sum(labels)
 
     for thr in thresholds:
-        tp = sum(1 for s, l in zip(scores, labels) if s >= thr and l == 1)
-        fp = sum(1 for s, l in zip(scores, labels) if s >= thr and l == 0)
+        tp = sum(1 for s, label in zip(scores, labels) if s >= thr and label == 1)
+        fp = sum(1 for s, label in zip(scores, labels) if s >= thr and label == 0)
         prec = tp / max(tp + fp, 1)
         rec = tp / max(n_pos, 1)
         prec_list.append(prec)
@@ -105,14 +105,17 @@ def compute_pr_curve(
 def full_metrics(labels: list[float], scores: list[float]) -> dict:
     auc = compute_auc(labels, scores)
     preds = [1 if s >= 0.0 else 0 for s in scores]
-    tp = sum(1 for p, l in zip(preds, labels) if p == 1 and l == 1)
-    fp = sum(1 for p, l in zip(preds, labels) if p == 1 and l == 0)
-    fn = sum(1 for p, l in zip(preds, labels) if p == 0 and l == 1)
-    tn = sum(1 for p, l in zip(preds, labels) if p == 0 and l == 0)
+
+    tp = sum(1 for p, label in zip(preds, labels) if p == 1 and label == 1)
+    fp = sum(1 for p, label in zip(preds, labels) if p == 1 and label == 0)
+    fn = sum(1 for p, label in zip(preds, labels) if p == 0 and label == 1)
+    tn = sum(1 for p, label in zip(preds, labels) if p == 0 and label == 0)
+
     prec = tp / max(tp + fp, 1)
     rec = tp / max(tp + fn, 1)
     f1 = 2 * prec * rec / max(prec + rec, 1e-9)
     acc = (tp + tn) / max(len(labels), 1)
+
     return {
         "auc": round(auc, 6),
         "accuracy": round(acc, 6),
@@ -363,7 +366,7 @@ def run_data_volume_ablation(
                 log_every=999_999,
             )
             trainer.fit(loader, epochs=epochs)
-            labels, scores = predict_nuformer(model, test_loader, device)
+            labels, scores = predict_tsformer(model, test_loader, device)
             auc = compute_auc(labels, scores)
             print(f"      AUC = {auc:.4f}")
             results[label][n_rows] = auc

@@ -1,9 +1,24 @@
 [project]
 name = "transact-former"
 version = "1.0.0"
-description = "Add your description here"
+description = "Transformer-based framework for modeling financial transaction sequences and predicting user behavior through multi-stage training."
 readme = "README.md"
 requires-python = ">=3.11,<3.12"
+
+authors = [
+    { name = "Ederson Corbari", email = "ecorbari@proton.me" }
+]
+
+keywords = ["transformer", "finance", "machine-learning", "time-series"]
+
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+license = { text = "MIT" }
+
 dependencies = [
     "faker>=40.13.0",
     "matplotlib>=3.10.8",
@@ -15,3 +30,7 @@ dependencies = [
     "torch>=2.2,<2.4",
     "umap-learn>=0.5.12",
 ]
+
+[project.urls]
+Homepage = "https://github.com/edersoncorbari/transact-former"
+Repository = "https://github.com/edersoncorbari/transact-former"

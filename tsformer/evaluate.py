@@ -315,8 +315,8 @@ def run_data_volume_ablation(
     vocab: Vocabulary,
     jsonl_path: Path,
     parquet_path: Path,
-    nuformer_small: tsFormer,
-    nuformer_large: tsFormer,
+    tsformer_small: tsFormer,
+    tsformer_large: tsFormer,
     device: torch.device,
     volume_fracs: list[float] = (0.025, 0.10, 0.20, 0.50, 1.0),
     max_seq_len: int = 512,
@@ -355,7 +355,7 @@ def run_data_volume_ablation(
         loader = build_finetune_loader(sub_ds, batch_size, num_workers=0)
         n_rows = n_use
 
-        for label, base_model in [("small", nuformer_small), ("large", nuformer_large)]:
+        for label, base_model in [("small", tsformer_small), ("large", tsformer_large)]:
             print(f"\n    volume={frac:.0%}  n={n_rows:,}  model={label}")
             model = copy.deepcopy(base_model).to(device)
             trainer = JointFusionTrainer(
@@ -509,15 +509,15 @@ def run_final_backtest(
     results = {
         "n_test": n_test,
         "late_fusion": {**lf_metrics, "rel_improvement": round(lf_rel_impr, 6)},
-        "nuformer": {**nuf_metrics, "rel_improvement": round(nuf_rel_impr, 6)},
+        "tsformer": {**nuf_metrics, "rel_improvement": round(nuf_rel_impr, 6)},
         "delta_auc": round(delta_auc, 6),
-        "nuformer_vs_lf_relative": round(
+        "tsformer_vs_lf_relative": round(
             (nuf_metrics["auc"] - lf_metrics["auc"]) / max(lf_metrics["auc"], 1e-9), 6
         ),
         "roc_late_fusion": lf_roc,
-        "roc_nuformer": nuf_roc,
+        "roc_tsformer": nuf_roc,
         "pr_late_fusion": lf_pr,
-        "pr_nuformer": nuf_pr,
+        "pr_tsformer": nuf_pr,
     }
 
     # ── Pretty print Table 4 style ──
@@ -535,6 +535,7 @@ def run_final_backtest(
     if output_dir:
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
+
         # Save metrics without large curve arrays for readability
         slim = {
             k: v
@@ -543,9 +544,11 @@ def run_final_backtest(
         }
         with open(output_dir / "backtest_results.json", "w") as f:
             json.dump(slim, f, indent=2)
+
         # Save curves separately
         with open(output_dir / "roc_curves.json", "w") as f:
-            json.dump({"late_fusion": lf_roc, "nuformer": nuf_roc}, f, indent=2)
+            json.dump({"late_fusion": lf_roc, "tsformer": nuf_roc}, f, indent=2)
+
         print(f"  Results saved → {output_dir}/backtest_results.json")
 
     return results

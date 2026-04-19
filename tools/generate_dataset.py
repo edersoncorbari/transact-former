@@ -1112,7 +1112,7 @@ def save_dataset(
 
 def parse_args() -> None:
     parser = argparse.ArgumentParser(
-        description="Generate synthetic fraud transaction dataset (nuFormer)"
+        description="Generate synthetic fraud transaction dataset (tsFormer)"
     )
     parser.add_argument(
         "--members",
@@ -1176,7 +1176,7 @@ def main() -> None:
     output_dir = Path(args.output)
 
     print("=" * 60)
-    print("  Synthetic Fraud Dataset Generator (nuFormer)")
+    print("  Synthetic Fraud Dataset Generator (tsFormer)")
     print("=" * 60)
     print(f"  Members       : {args.members:,}")
     print(f"  Score dates   : {args.score_dates}")

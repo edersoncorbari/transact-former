@@ -9,10 +9,10 @@ Full model architecture implementing Sections 3.1, 3.2 and 3.3 of the paper.
 
 Components
 ──────────
-TransactionTransformer  — causal GPT-like backbone with NoPE 
-LoRALinear              — low-rank adaptation for fine-tuning 
+TransactionTransformer  — causal GPT-like backbone with NoPE
+LoRALinear              — low-rank adaptation for fine-tuning
 PLREmbedding            — periodic / linear embedding for numerical features
-DCNv2Block              — deep & cross network for tabular features 
+DCNv2Block              — deep & cross network for tabular features
 tsFormer                — joint fusion model with end-to-end training
 """
 
@@ -26,8 +26,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 1.  Building blocks
+# 1. Building blocks
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 class RMSNorm(nn.Module):
     """Root-mean-square layer norm (no mean subtraction — lighter than LayerNorm)."""
@@ -35,7 +36,7 @@ class RMSNorm(nn.Module):
     def __init__(self, d: int, eps: float = 1e-6) -> None:
         super().__init__()
         self.weight = nn.Parameter(torch.ones(d))
-        self.eps    = eps
+        self.eps = eps
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         rms = x.pow(2).mean(-1, keepdim=True).add(self.eps).sqrt()
@@ -53,21 +54,21 @@ class CausalSelfAttention(nn.Module):
         assert d_model % n_heads == 0
         self.n_heads = n_heads
         self.head_dim = d_model // n_heads
-        self.scale    = math.sqrt(self.head_dim)
+        self.scale = math.sqrt(self.head_dim)
 
-        self.qkv  = nn.Linear(d_model, 3 * d_model, bias=False)
+        self.qkv = nn.Linear(d_model, 3 * d_model, bias=False)
         self.proj = nn.Linear(d_model, d_model, bias=False)
         self.drop = nn.Dropout(dropout)
 
     def forward(
         self,
-        x: torch.Tensor,                         # (B, T, D)
+        x: torch.Tensor,  # (B, T, D)
         attention_mask: Optional[torch.Tensor],  # (B, T) bool — True = keep
     ) -> torch.Tensor:
         B, T, D = x.shape
         qkv = self.qkv(x).reshape(B, T, 3, self.n_heads, self.head_dim)
-        q, k, v = qkv.unbind(dim=2)                 # Each (B, T, H, Dh)
-        q = q.transpose(1, 2)                       # (B, H, T, Dh)
+        q, k, v = qkv.unbind(dim=2)  # Each (B, T, H, Dh)
+        q = q.transpose(1, 2)  # (B, H, T, Dh)
         k = k.transpose(1, 2)
         v = v.transpose(1, 2)
 
@@ -84,22 +85,23 @@ class CausalSelfAttention(nn.Module):
         # Use PyTorch's efficient attention when available
         try:
             out = F.scaled_dot_product_attention(
-                q, k, v,
+                q,
+                k,
+                v,
                 attn_mask=attn_bias,
                 dropout_p=self.drop.p if self.training else 0.0,
             )
-        except TypeError: # older PyTorch fallback
+        except TypeError:  # older PyTorch fallback
             scores = (q @ k.transpose(-2, -1)) / self.scale + attn_bias
             scores = F.softmax(scores, dim=-1)
             scores = self.drop(scores)
-            out    = scores @ v
+            out = scores @ v
 
         out = out.transpose(1, 2).reshape(B, T, D)
         return self.proj(out)
 
 
 class FeedForward(nn.Module):
-
     def __init__(self, d_model: int, d_ff: int, dropout: float = 0.1) -> None:
         super().__init__()
         self.net = nn.Sequential(
@@ -115,23 +117,27 @@ class FeedForward(nn.Module):
 
 
 class TransformerBlock(nn.Module):
-
-    def __init__(self, d_model: int, n_heads: int, d_ff: int, dropout: float = 0.1) -> None:
+    def __init__(
+        self, d_model: int, n_heads: int, d_ff: int, dropout: float = 0.1
+    ) -> None:
         super().__init__()
         self.norm1 = RMSNorm(d_model)
-        self.attn  = CausalSelfAttention(d_model, n_heads, dropout)
+        self.attn = CausalSelfAttention(d_model, n_heads, dropout)
         self.norm2 = RMSNorm(d_model)
-        self.ff    = FeedForward(d_model, d_ff, dropout)
+        self.ff = FeedForward(d_model, d_ff, dropout)
 
-    def forward(self, x: torch.Tensor, attention_mask: Optional[torch.Tensor]) -> torch.Tensor:
+    def forward(
+        self, x: torch.Tensor, attention_mask: Optional[torch.Tensor]
+    ) -> torch.Tensor:
         x = x + self.attn(self.norm1(x), attention_mask)
         x = x + self.ff(self.norm2(x))
         return x
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 2. Transaction Transformer backbone  
+# 2. Transaction Transformer backbone
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 class TransactionTransformer(nn.Module):
     """
@@ -151,26 +157,25 @@ class TransactionTransformer(nn.Module):
 
     def __init__(
         self,
-        vocab_size:  int,
-        d_model:     int   = 256,
-        n_layers:    int   = 6,
-        n_heads:     int   = 8,
-        d_ff:        Optional[int] = None,
-        max_seq_len: int   = 2048,
-        dropout:     float = 0.1,
+        vocab_size: int,
+        d_model: int = 256,
+        n_layers: int = 6,
+        n_heads: int = 8,
+        d_ff: Optional[int] = None,
+        # max_seq_len: int   = 2048,
+        dropout: float = 0.1,
     ) -> None:
         super().__init__()
         d_ff = d_ff or 4 * d_model
 
         self.d_model = d_model
         self.embedding = nn.Embedding(vocab_size, d_model, padding_idx=0)
-        self.drop      = nn.Dropout(dropout)
-        self.blocks    = nn.ModuleList([
-            TransformerBlock(d_model, n_heads, d_ff, dropout)
-            for _ in range(n_layers)
-        ])
-        self.norm     = RMSNorm(d_model)
-        self.lm_head  = nn.Linear(d_model, vocab_size, bias=False)
+        self.drop = nn.Dropout(dropout)
+        self.blocks = nn.ModuleList(
+            [TransformerBlock(d_model, n_heads, d_ff, dropout) for _ in range(n_layers)]
+        )
+        self.norm = RMSNorm(d_model)
+        self.lm_head = nn.Linear(d_model, vocab_size, bias=False)
 
         # Weight tying (standard in LM literature)
         self.lm_head.weight = self.embedding.weight
@@ -178,7 +183,7 @@ class TransactionTransformer(nn.Module):
         self._init_weights()
 
     def param_count(self) -> dict[str, int]:
-        total     = sum(p.numel() for p in self.parameters())
+        total = sum(p.numel() for p in self.parameters())
         trainable = sum(p.numel() for p in self.parameters() if p.requires_grad)
         return {"total": total, "trainable": trainable, "frozen": total - trainable}
 
@@ -195,9 +200,9 @@ class TransactionTransformer(nn.Module):
 
     def encode(
         self,
-        input_ids:      torch.Tensor,               # (B, T)
-        attention_mask: Optional[torch.Tensor],     # (B, T)
-    ) -> torch.Tensor:                              # (B, T, D)
+        input_ids: torch.Tensor,  # (B, T)
+        attention_mask: Optional[torch.Tensor],  # (B, T)
+    ) -> torch.Tensor:  # (B, T, D)
         x = self.drop(self.embedding(input_ids))
         for block in self.blocks:
             x = block(x, attention_mask)
@@ -205,12 +210,12 @@ class TransactionTransformer(nn.Module):
 
     def forward(
         self,
-        input_ids:      torch.Tensor,
+        input_ids: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        labels:         Optional[torch.Tensor] = None,
+        labels: Optional[torch.Tensor] = None,
     ) -> dict[str, torch.Tensor]:
         hidden = self.encode(input_ids, attention_mask)  # (B, T, D)
-        logits = self.lm_head(hidden)                    # (B, T, V)
+        logits = self.lm_head(hidden)  # (B, T, V)
 
         out: dict[str, torch.Tensor] = {"logits": logits, "hidden": hidden}
 
@@ -227,7 +232,7 @@ class TransactionTransformer(nn.Module):
 
     def get_user_embedding(
         self,
-        input_ids:      torch.Tensor,
+        input_ids: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         """
@@ -240,26 +245,29 @@ class TransactionTransformer(nn.Module):
             # Creates a floating mask to ignore paddings in pooling
             # mask shape: (B, T, 1)
             mask = attention_mask.unsqueeze(-1).float()
-            
+
             # Mean Pooling (of real tokens only)
             sum_emb = (hidden * mask).sum(dim=1)
             mean_pool = sum_emb / mask.sum(dim=1).clamp(min=1e-9)
-            
+
             # Max Pooling (real tokens only)
             # Replaces paddings with a very low value so as not to affect the Max
-            masked_hidden = hidden.masked_fill(~attention_mask.unsqueeze(-1), float("-inf"))
+            masked_hidden = hidden.masked_fill(
+                ~attention_mask.unsqueeze(-1), float("-inf")
+            )
             max_pool = masked_hidden.max(dim=1).values
         else:
             mean_pool = hidden.mean(dim=1)
-            max_pool  = hidden.max(dim=1).values
+            max_pool = hidden.max(dim=1).values
 
         # Concatenate: 64 + 64 = 128. Now the Head will accept it! EDMC.
         return torch.cat([mean_pool, max_pool], dim=-1)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 3.  LoRA linear layer
+# 3. LoRA linear layer
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 class LoRALinear(nn.Module):
     """
@@ -269,22 +277,22 @@ class LoRALinear(nn.Module):
 
     def __init__(
         self,
-        linear:  nn.Linear,
-        rank:    int   = 8,
-        alpha:   float = 16.0,
+        linear: nn.Linear,
+        rank: int = 8,
+        alpha: float = 16.0,
         dropout: float = 0.05,
     ) -> None:
         super().__init__()
-        self.linear  = linear
-        self.rank    = rank
+        self.linear = linear
+        self.rank = rank
         self.scaling = alpha / rank
 
-        in_features  = linear.in_features
+        in_features = linear.in_features
         out_features = linear.out_features
 
-        self.lora_A  = nn.Linear(in_features,  rank,         bias=False)
-        self.lora_B  = nn.Linear(rank,          out_features, bias=False)
-        self.drop    = nn.Dropout(dropout)
+        self.lora_A = nn.Linear(in_features, rank, bias=False)
+        self.lora_B = nn.Linear(rank, out_features, bias=False)
+        self.drop = nn.Dropout(dropout)
 
         nn.init.kaiming_uniform_(self.lora_A.weight, a=math.sqrt(5))
         nn.init.zeros_(self.lora_B.weight)
@@ -301,8 +309,8 @@ class LoRALinear(nn.Module):
 
 def apply_lora_to_transformer(
     transformer: TransactionTransformer,
-    rank:    int   = 8,
-    alpha:   float = 16.0,
+    rank: int = 8,
+    alpha: float = 16.0,
     dropout: float = 0.05,
     target_modules: tuple[str, ...] = ("qkv", "proj"),
 ) -> TransactionTransformer:
@@ -317,7 +325,7 @@ def apply_lora_to_transformer(
     for block in transformer.blocks:
         attn = block.attn
         if "qkv" in target_modules:
-            attn.qkv  = LoRALinear(attn.qkv,  rank=rank, alpha=alpha, dropout=dropout)
+            attn.qkv = LoRALinear(attn.qkv, rank=rank, alpha=alpha, dropout=dropout)
         if "proj" in target_modules:
             attn.proj = LoRALinear(attn.proj, rank=rank, alpha=alpha, dropout=dropout)
 
@@ -325,8 +333,9 @@ def apply_lora_to_transformer(
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 4.  PLR — Periodic Linear embedding for numerical features
+# 4. PLR — Periodic Linear embedding for numerical features
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 class PLREmbedding(nn.Module):
     """
@@ -338,15 +347,17 @@ class PLREmbedding(nn.Module):
         e(x) = [sin(ω₁x + φ₁), cos(ω₁x + φ₁), …, sin(ωₖx + φₖ), cos(ωₖx + φₖ), linear_proj(x)]
     """
 
-    def __init__(self, n_features: int, n_frequencies: int = 32, d_out: int = 64) -> None:
+    def __init__(
+        self, n_features: int, n_frequencies: int = 32, d_out: int = 64
+    ) -> None:
         super().__init__()
-        self.n_features    = n_features
+        self.n_features = n_features
         self.n_frequencies = n_frequencies
-        self.d_out         = d_out
+        self.d_out = d_out
 
         # Learnable frequencies and phases per feature
         self.omega = nn.Parameter(torch.randn(n_features, n_frequencies))
-        self.phi   = nn.Parameter(torch.randn(n_features, n_frequencies))
+        self.phi = nn.Parameter(torch.randn(n_features, n_frequencies))
 
         # Project [sin, cos] × n_freq → d_out
         self.proj = nn.Linear(2 * n_frequencies, d_out, bias=True)
@@ -356,16 +367,17 @@ class PLREmbedding(nn.Module):
         B, F = x.shape
         assert F == self.n_features
 
-        x_exp = x.unsqueeze(-1)                     # (B, F, 1)
-        arg   = x_exp * self.omega + self.phi       # (B, F, n_freq)
+        x_exp = x.unsqueeze(-1)  # (B, F, 1)
+        arg = x_exp * self.omega + self.phi  # (B, F, n_freq)
         feats = torch.cat([torch.sin(arg), torch.cos(arg)], dim=-1)  # (B, F, 2*n_freq)
-        out   = self.proj(feats)                    # (B, F, d_out)
-        return out.reshape(B, F * self.d_out)       # (B, F*d_out)
+        out = self.proj(feats)  # (B, F, d_out)
+        return out.reshape(B, F * self.d_out)  # (B, F*d_out)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 5.  DCNv2  
+# 5. DCNv2
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 class CrossLayer(nn.Module):
     """
@@ -392,13 +404,13 @@ class DCNv2Block(nn.Module):
 
     def __init__(
         self,
-        d_in:      int,
-        d_cross:   int = 128,
-        n_cross:   int = 3,
-        d_deep:    int = 256,
-        n_deep:    int = 2,
-        d_out:     int = 64,
-        dropout:   float = 0.1,
+        d_in: int,
+        d_cross: int = 128,
+        n_cross: int = 3,
+        d_deep: int = 256,
+        n_deep: int = 2,
+        d_out: int = 64,
+        dropout: float = 0.1,
     ) -> None:
         super().__init__()
 
@@ -425,25 +437,26 @@ class DCNv2Block(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # x: (B, d_in)
-        h  = self.input_proj(x)          # (B, d_cross)
+        h = self.input_proj(x)  # (B, d_cross)
         x0 = h
 
         # Cross network
         xc = h
         for layer in self.cross_layers:
-            xc = layer(x0, xc)           # (B, d_cross)
+            xc = layer(x0, xc)  # (B, d_cross)
 
         # Deep network
-        xd = self.deep_net(h)            # (B, d_deep)
+        xd = self.deep_net(h)  # (B, d_deep)
 
         # Combine
-        combined = torch.cat([xc, xd], dim=-1)   # (B, d_cross + d_deep)
-        return self.out_proj(combined)           # (B, d_out)
+        combined = torch.cat([xc, xd], dim=-1)  # (B, d_cross + d_deep)
+        return self.out_proj(combined)  # (B, d_out)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 6.  Classification head
+# 6. Classification head
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 class ClassificationHead(nn.Module):
     """MLP that maps user embedding → binary score."""
@@ -452,23 +465,27 @@ class ClassificationHead(nn.Module):
         super().__init__()
         if hidden_dims is None:
             hidden_dims = []
-        
+
         layers = []
         prev = d_in
+
         for h in hidden_dims:
-            if h is None: continue 
+            if h is None:
+                continue
             layers += [nn.Linear(prev, h), nn.GELU(), nn.Dropout(dropout)]
             prev = h
+
         layers += [nn.Linear(prev, 1)]
         self.net = nn.Sequential(*layers)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.net(x).squeeze(-1)   # (B,)
+        return self.net(x).squeeze(-1)  # (B,)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 7.  tsFormer — Joint Fusion  (Section 3.3, Figure 5)
+# 7. tsFormer — Joint Fusion  (Section 3.3, Figure 5)
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 class tsFormer(nn.Module):
     """
@@ -478,31 +495,31 @@ class tsFormer(nn.Module):
 
     def __init__(
         self,
-        vocab_size:      int,
-        n_tabular:       int,
+        vocab_size: int,
+        n_tabular: int,
         # Transformer
-        d_model:         int   = 256,
-        n_layers:        int   = 6,
-        n_heads:         int   = 8,
-        max_seq_len:     int   = 2048,
+        d_model: int = 256,
+        n_layers: int = 6,
+        n_heads: int = 8,
+        max_seq_len: int = 2048,
         transformer_dropout: float = 0.1,
         # PLR
-        n_frequencies:   int   = 32,
-        plr_d_out:       int   = 32,
+        n_frequencies: int = 32,
+        plr_d_out: int = 32,
         # DCNv2
-        d_cross:         int   = 128,
-        n_cross:         int   = 3,
-        d_deep:          int   = 256,
-        n_deep:          int   = 2,
-        dcn_d_out:       int   = 64,
-        dcn_dropout:     float = 0.1,
+        d_cross: int = 128,
+        n_cross: int = 3,
+        d_deep: int = 256,
+        n_deep: int = 2,
+        dcn_d_out: int = 64,
+        dcn_dropout: float = 0.1,
         # Head
-        head_hidden:     tuple[int, ...] = (256, 128),
-        head_dropout:    float = 0.1,
+        head_hidden: tuple[int, ...] = (256, 128),
+        head_dropout: float = 0.1,
         # LoRA (set lora_rank > 0 to enable)
-        lora_rank:       int   = 0,
-        lora_alpha:      float = 16.0,
-        lora_dropout:    float = 0.05,
+        lora_rank: int = 0,
+        lora_alpha: float = 16.0,
+        lora_dropout: float = 0.05,
     ) -> None:
         super().__init__()
 
@@ -541,31 +558,31 @@ class tsFormer(nn.Module):
         )
 
         # Normalise transaction embeddings before concatenation (Section 3.3)
-        self.emb_norm = nn.LayerNorm(d_model * 2) # Adjustment for 128 (64*2) EDMC.
+        self.emb_norm = nn.LayerNorm(d_model * 2)  # Adjustment for 128 (64*2) EDMC.
 
         # head_in = d_model + dcn_d_out
-        head_in = (d_model * 2) + dcn_d_out # Adjustment for 128 (64*2) EDMC.
+        head_in = (d_model * 2) + dcn_d_out  # Adjustment for 128 (64*2) EDMC.
         self.head = ClassificationHead(head_in, head_hidden, head_dropout)
 
     def forward(
         self,
-        input_ids:      torch.Tensor,               # (B, T)
-        tabular_feats:  torch.Tensor,               # (B, n_tab)
+        input_ids: torch.Tensor,  # (B, T)
+        tabular_feats: torch.Tensor,  # (B, n_tab)
         attention_mask: Optional[torch.Tensor] = None,  # (B, T)
-        labels:         Optional[torch.Tensor] = None,  # (B,)
+        labels: Optional[torch.Tensor] = None,  # (B,)
     ) -> dict[str, torch.Tensor]:
 
         # ── Transaction branch ──
-        user_emb  = self.transformer.get_user_embedding(input_ids, attention_mask)
-        user_emb  = self.emb_norm(user_emb)          # (B, d_model)
+        user_emb = self.transformer.get_user_embedding(input_ids, attention_mask)
+        user_emb = self.emb_norm(user_emb)  # (B, d_model)
 
         # ── Tabular branch ──
-        tab_emb   = self.plr(tabular_feats)           # (B, n_tab * plr_d_out)
-        tab_emb   = self.dcn(tab_emb)                 # (B, dcn_d_out)
+        tab_emb = self.plr(tabular_feats)  # (B, n_tab * plr_d_out)
+        tab_emb = self.dcn(tab_emb)  # (B, dcn_d_out)
 
         # ── Fusion ──
-        fused  = torch.cat([user_emb, tab_emb], dim=-1)  # (B, d_model + dcn_d_out)
-        logits = self.head(fused)                          # (B,)
+        fused = torch.cat([user_emb, tab_emb], dim=-1)  # (B, d_model + dcn_d_out)
+        logits = self.head(fused)  # (B,)
 
         out: dict[str, torch.Tensor] = {"logits": logits}
 
@@ -579,6 +596,6 @@ class tsFormer(nn.Module):
         return [p for p in self.parameters() if p.requires_grad]
 
     def param_count(self) -> dict[str, int]:
-        total     = sum(p.numel() for p in self.parameters())
+        total = sum(p.numel() for p in self.parameters())
         trainable = sum(p.numel() for p in self.parameters() if p.requires_grad)
         return {"total": total, "trainable": trainable, "frozen": total - trainable}

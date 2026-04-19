@@ -61,7 +61,7 @@ def _auc_from_scores(labels: list[float], scores: list[float]) -> float:
 def _binary_metrics(labels: list[float], scores: list[float]) -> dict[str, float]:
     auc = _auc_from_scores(labels, scores)
     preds = [1 if s >= 0.0 else 0 for s in scores]  # logit threshold 0
-    correct = sum(p == int(l) for p, l in zip(preds, labels))
+    correct = sum(p == int(label) for p, label in zip(preds, labels))
     return {
         "auc": round(auc, 6),
         "accuracy": round(correct / max(len(labels), 1), 6),

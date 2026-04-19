@@ -311,7 +311,7 @@ class tsFormerPredictor(_BasePredictor):
         state_dict = _load_state(checkpoint_path)
         own_keys = set(model.state_dict().keys())
         filtered = {k: v for k, v in state_dict.items() if k in own_keys}
-        
+
         missing = own_keys - set(filtered.keys())
         if missing:
             raise RuntimeError(
@@ -382,6 +382,7 @@ class tsFormerPredictor(_BasePredictor):
             )
             for inp, logit, prob in zip(inputs, logits, probs)
         ]
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # 2. LateFusionPredictor (embedding classifier — no tabular required)

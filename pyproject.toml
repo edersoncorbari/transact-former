@@ -8,6 +8,7 @@ dependencies = [
     "faker>=40.13.0",
     "matplotlib>=3.10.8",
     "pandas>=3.0.2",
+    "pyarrow>=23.0.1",
     "python-dotenv>=1.2.2",
     "ruff>=0.15.11",
     "scikit-learn>=1.8.0",

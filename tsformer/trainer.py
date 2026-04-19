@@ -32,6 +32,9 @@ from torch.utils.data import DataLoader
 
 from tsformer.model import TransactionTransformer
 
+import warnings
+
+warnings.filterwarnings("ignore", category=UserWarning)
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Metric helpers

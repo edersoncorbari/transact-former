@@ -1,22 +1,23 @@
 """
-transactFormer — model.py
-
-Full model architecture implementing Sections 3.1, 3.2 and 3.3 of the paper.
+tsFormer — model.py
 
 Author: Ederson Corbari <ecorbari@proton.me>
 Created: 2026-04
 Based on: "Your Spending Needs Attention: Modeling Financial Habits with Transformers"
 
+Full model architecture implementing Sections 3.1, 3.2 and 3.3 of the paper.
+
 Components
 ──────────
-TransactionTransformer   — causal GPT-like backbone with NoPE 
-LoRALinear               — low-rank adaptation for fine-tuning 
-PLREmbedding             — periodic / linear embedding for numerical features
-DCNv2Block               — deep & cross network for tabular features 
-transactFormer           — joint fusion model with end-to-end training
+TransactionTransformer  — causal GPT-like backbone with NoPE 
+LoRALinear              — low-rank adaptation for fine-tuning 
+PLREmbedding            — periodic / linear embedding for numerical features
+DCNv2Block              — deep & cross network for tabular features 
+tsFormer                — joint fusion model with end-to-end training
 """
 
 from __future__ import annotations
+
 from typing import Optional
 
 import math
@@ -234,7 +235,7 @@ class TransactionTransformer(nn.Module):
         used for downstream tasks.
         """
         hidden = self.encode(input_ids, attention_mask)  # (B, T, D)
-        
+
         if attention_mask is not None:
             # Creates a floating mask to ignore paddings in pooling
             # mask shape: (B, T, 1)
@@ -447,14 +448,18 @@ class DCNv2Block(nn.Module):
 class ClassificationHead(nn.Module):
     """MLP that maps user embedding → binary score."""
 
-    def __init__(self, d_in: int, hidden_dims: tuple[int, ...] = (128,), dropout: float = 0.1) -> None:
+    def __init__(self, d_in: int, hidden_dims: list[int], dropout: float = 0.1):
         super().__init__()
-        layers: list[nn.Module] = []
+        if hidden_dims is None:
+            hidden_dims = []
+        
+        layers = []
         prev = d_in
         for h in hidden_dims:
+            if h is None: continue 
             layers += [nn.Linear(prev, h), nn.GELU(), nn.Dropout(dropout)]
             prev = h
-        layers.append(nn.Linear(prev, 1))
+        layers += [nn.Linear(prev, 1)]
         self.net = nn.Sequential(*layers)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -462,13 +467,12 @@ class ClassificationHead(nn.Module):
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 7.  transactFormer — Joint Fusion  (Section 3.3, Figure 5)
+# 7.  tsFormer — Joint Fusion  (Section 3.3, Figure 5)
 # ──────────────────────────────────────────────────────────────────────────────
 
-class transactFormer(nn.Module):
+class tsFormer(nn.Module):
     """
     Full joint-fusion model described in Section 3.3.
-
     Training signal propagates end-to-end through both branches.
     """
 
@@ -537,9 +541,10 @@ class transactFormer(nn.Module):
         )
 
         # Normalise transaction embeddings before concatenation (Section 3.3)
-        self.emb_norm = nn.LayerNorm(d_model)
+        self.emb_norm = nn.LayerNorm(d_model * 2) # Adjustment for 128 (64*2) EDMC.
 
-        head_in = d_model + dcn_d_out
+        # head_in = d_model + dcn_d_out
+        head_in = (d_model * 2) + dcn_d_out # Adjustment for 128 (64*2) EDMC.
         self.head = ClassificationHead(head_in, head_hidden, head_dropout)
 
     def forward(
@@ -560,7 +565,7 @@ class transactFormer(nn.Module):
 
         # ── Fusion ──
         fused  = torch.cat([user_emb, tab_emb], dim=-1)  # (B, d_model + dcn_d_out)
-        logits = self.head(fused)                        # (B,)
+        logits = self.head(fused)                          # (B,)
 
         out: dict[str, torch.Tensor] = {"logits": logits}
 
